@@ -12,7 +12,7 @@ Para ajustar el modelo, solo hay que modificar este archivo.
 # ── Reproducibilidad ─────────────────────────────────────────────────────────
 # Fijar un entero para resultados reproducibles.
 # Cambiar a None para obtener resultados distintos en cada corrida.
-SEMILLA = 42
+SEMILLA = None
 
 # ── Horizonte de simulación ───────────────────────────────────────────────────
 # El día empieza a las 10:00 (t = 0) y termina a las 21:00 (t = 660 min).

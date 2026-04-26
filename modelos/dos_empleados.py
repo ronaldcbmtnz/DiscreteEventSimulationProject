@@ -19,7 +19,7 @@ Importa de core:
 
 from core.generacion import gen_exponencial, gen_tipo_cliente, gen_tiempo_prep
 from core.parametros import (
-    T_FIN, FRANJAS, P_SANDWICH,
+    T_FIN, FRANJAS, INDICES_PICO, P_SANDWICH,
     PREP_SANDWICH, PREP_SUSHI, UMBRAL_QUEJA,
     LAMBDA_NORMAL, LAMBDA_PICO,
 )
@@ -75,10 +75,18 @@ def inicializar(lambda_normal: float, lambda_pico: float) -> dict:
         "N_A":    0,
         "N_D":    0,
         "quejas": 0,
+        "quejas_pico":   0,
+        "quejas_normal": 0,
+        "clientes_pico":   0,
+        "clientes_normal": 0,
+
+        # ── Control de cierre ──────────────────────────────────────────────
+        "t_fin_alcanzado": False,  # True once we cross T_FIN
 
         # ── Registros por cliente ─────────────────────────────────────────
         "t_llegada":    {},   # t_llegada[id]    = minuto de llegada
         "t_inicio_srv": {},   # t_inicio_srv[id] = minuto de inicio de servicio
+        "franja_llegada": {},  # franja_llegada[id] = segmento_idx at arrival time
     }
     return estado
 
@@ -116,12 +124,24 @@ def evento_arribo(estado: dict) -> None:
            Si no                 → encolar (FIFO).
         4. Generar el tiempo del próximo arribo.
     """
+    # Skip arrivals if T_FIN has been crossed (Rule 1)
+    if estado["t_fin_alcanzado"]:
+        estado["t_A"] = float("inf")
+        return
+
     t = estado["t_A"]
     estado["t"] = t
 
     estado["N_A"] += 1
     id_cliente = estado["N_A"]
     estado["t_llegada"][id_cliente] = t
+    estado["franja_llegada"][id_cliente] = estado["segmento_idx"]
+
+    # Contabilizar el cliente según la franja en la que llegó.
+    if estado["segmento_idx"] in INDICES_PICO:
+        estado["clientes_pico"] += 1
+    else:
+        estado["clientes_normal"] += 1
 
     tipo = gen_tipo_cliente(P_SANDWICH)
 
@@ -149,10 +169,26 @@ def _liberar_empleado(estado: dict, empleado: int) -> None:
 
     # Calcular espera en cola y registrar queja si corresponde
     espera = estado["t_inicio_srv"][id_cliente] - estado["t_llegada"][id_cliente]
-    if espera > UMBRAL_QUEJA:
-        estado["quejas"] += 1
+    franja = estado["franja_llegada"][id_cliente]
+    if franja in INDICES_PICO:
+        if espera > UMBRAL_QUEJA:
+            estado["quejas_pico"] += 1
+    else:
+        if espera > UMBRAL_QUEJA:
+            estado["quejas_normal"] += 1
+
+    estado["quejas"] = estado["quejas_pico"] + estado["quejas_normal"]
 
     estado["N_D"] += 1
+
+    # If T_FIN has been crossed, drop remaining queue (Rule 3)
+    if estado["t_fin_alcanzado"]:
+        # La cocina cerró: la cola se descarta sin servir más clientes.
+        estado["cola"].clear()
+        estado[f"emp{empleado}_libre"] = True
+        estado[f"cliente_emp{empleado}"] = None
+        estado[f"t_D{empleado}"] = float("inf")
+        return
 
     if estado["cola"]:
         # Atender al siguiente en cola
@@ -235,8 +271,12 @@ def simular(
         tipo_ev = min(candidatos, key=candidatos.get)
         t_ev    = candidatos[tipo_ev]
 
-        # Condición de parada
-        if t_ev > T_FIN:
+        # Set flag when crossing T_FIN (Rule 1: stop accepting arrivals)
+        if t_ev >= T_FIN:
+            estado["t_fin_alcanzado"] = True
+
+        # Termination: all event times are at infinity (Rules 2-4)
+        if all(t == float("inf") for t in candidatos.values()):
             break
 
         # Despachar al manejador correspondiente

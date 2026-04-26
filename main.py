@@ -57,11 +57,13 @@ def main():
         fn_simular=dos_empleados.simular,
         n_empleados=2,
         lambdas_pico=LAMBDAS_PICO,
+        n_rep=30,
     )
     res_3 = analisis_sensibilidad(
         fn_simular=tres_empleados.simular,
         n_empleados=3,
         lambdas_pico=LAMBDAS_PICO,
+        n_rep=30,
     )
 
     # ── Comparación final ─────────────────────────────────────────────────────
