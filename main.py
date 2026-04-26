@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from core.parametros  import SEMILLA, LAMBDA_NORMAL, LAMBDA_PICO
 from core.resultados  import imprimir_resultados, analisis_sensibilidad, comparar_variantes
-from modelos          import dos_empleados, tres_empleados
+from modelos          import simulador
 
 
 # ── Lambdas a explorar en el análisis de sensibilidad ────────────────────────
@@ -35,9 +35,11 @@ def main():
     print("  VARIANTE: 2 EMPLEADOS")
     print("━" * 62)
     random.seed(SEMILLA)
-    estado_2 = dos_empleados.simular(
+    estado_2 = simulador.simular(
         lambda_normal=LAMBDA_NORMAL,
         lambda_pico=LAMBDA_PICO,
+        n_empleados_base=2,
+        tercer_empleado_en_pico=False,
     )
     imprimir_resultados(estado_2, n_empleados=2)
 
@@ -46,21 +48,33 @@ def main():
     print("  VARIANTE: 3 EMPLEADOS (3ro solo en hora pico)")
     print("━" * 62)
     random.seed(SEMILLA)
-    estado_3 = tres_empleados.simular(
+    estado_3 = simulador.simular(
         lambda_normal=LAMBDA_NORMAL,
         lambda_pico=LAMBDA_PICO,
+        n_empleados_base=2,
+        tercer_empleado_en_pico=True,
     )
     imprimir_resultados(estado_3, n_empleados=3)
 
     # ── Análisis de sensibilidad ──────────────────────────────────────────────
     res_2 = analisis_sensibilidad(
-        fn_simular=dos_empleados.simular,
+        fn_simular=lambda lambda_normal, lambda_pico: simulador.simular(
+            lambda_normal=lambda_normal,
+            lambda_pico=lambda_pico,
+            n_empleados_base=2,
+            tercer_empleado_en_pico=False,
+        ),
         n_empleados=2,
         lambdas_pico=LAMBDAS_PICO,
         n_rep=30,
     )
     res_3 = analisis_sensibilidad(
-        fn_simular=tres_empleados.simular,
+        fn_simular=lambda lambda_normal, lambda_pico: simulador.simular(
+            lambda_normal=lambda_normal,
+            lambda_pico=lambda_pico,
+            n_empleados_base=2,
+            tercer_empleado_en_pico=True,
+        ),
         n_empleados=3,
         lambdas_pico=LAMBDAS_PICO,
         n_rep=30,
