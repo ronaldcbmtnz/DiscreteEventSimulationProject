@@ -8,7 +8,10 @@ claves del estado que son comunes a ambas variantes.
 ================================================================================
 """
 
-from core.parametros import UMBRAL_QUEJA, LAMBDA_NORMAL, SEMILLA
+import math
+import random
+
+from core.parametros import UMBRAL_QUEJA, LAMBDA_NORMAL, LAMBDA_PICO, SEMILLA
 
 
 def imprimir_resultados(estado: dict, n_empleados: int) -> None:
@@ -95,7 +98,6 @@ def analisis_sensibilidad(
     Retorna:
         Lista de dicts con {lambda_pico, N_A, quejas, pct_quejas, pct_quejas_pico, pct_quejas_normal} por corrida.
     """
-    import random
     from statistics import mean
 
     resultados = []
@@ -192,18 +194,159 @@ def comparar_variantes(resultados_2: list, resultados_3: list) -> None:
 
     print("=" * 64)
     print()
-    print("=" * 64)
-    print("  COMPARACIÓN GLOBAL: 2 emp vs 3 emp (3ro solo en hora pico)")
-    print("  Responde: ¿cuántos clientes esperaron más de 5 min en el día?")
-    print("=" * 64)
-    print(f"  {'λ_pico':>7} | {'% Global (2 emp)':>17} | {'% Global (3 emp)':>17} | {'Reducción (pp)':>14}")
-    print("  " + "─" * 64)
 
-    for r2, r3 in zip(resultados_2, resultados_3):
-        reduccion = r2["pct_quejas"] - r3["pct_quejas"]
+
+def analisis_estadistico(
+    fn_simular,
+    d: float,
+    metrica: str = "pico",
+    semilla_base: int = SEMILLA,
+) -> dict:
+    """
+    Aplica el algoritmo de parada estadística del Capítulo 4.
+
+    Parámetros:
+        fn_simular   : callable que recibe lambda_pico y retorna
+                       el estado final del simulador
+        d            : desviación estándar máxima aceptable del
+                       estimador (S/√k < d para detener)
+        metrica      : 'pico'   → usa pct_quejas_pico por corrida
+                       'global' → usa pct_quejas (global) por corrida
+        semilla_base : semilla base; la corrida i usa semilla_base + i
+
+    Retorna:
+        dict con:
+            theta     : estimación final de θ = X̄
+            S         : desviación estándar muestral final
+            k         : número de corridas realizadas
+            d         : valor de d utilizado
+            precision : valor final de S/√k
+            valores   : lista de todos los Xi observados
+    """
+    valores = []
+
+    # Step 2: mínimo 30 corridas antes de evaluar el criterio de parada.
+    for i in range(30):
+        if semilla_base is None:
+            random.seed(None)
+        else:
+            random.seed(semilla_base + i)
+        estado = fn_simular(LAMBDA_PICO)
+        if metrica == "pico":
+            clientes = estado["clientes_pico"]
+            quejas = estado["quejas_pico"]
+            xi = (quejas / clientes * 100) if clientes > 0 else 0.0
+        else:
+            n_a = estado["N_A"]
+            quejas = estado["quejas"]
+            xi = (quejas / n_a * 100) if n_a > 0 else 0.0
+        valores.append(xi)
+
+    k = 30
+
+    # Step 3: continuar hasta que S/√k sea menor que d.
+    while True:
+        x_bar = sum(valores) / k
+        s2 = sum((x - x_bar) ** 2 for x in valores) / (k - 1)
+        s = math.sqrt(s2)
+        precision = s / math.sqrt(k)
+
+        if precision < d:
+            break
+
+        # Generar una corrida adicional usando la siguiente semilla.
+        if semilla_base is None:
+            random.seed(None)
+        else:
+            random.seed(semilla_base + k)
+        estado = fn_simular(LAMBDA_PICO)
+        if metrica == "pico":
+            clientes = estado["clientes_pico"]
+            quejas = estado["quejas_pico"]
+            xi = (quejas / clientes * 100) if clientes > 0 else 0.0
+        else:
+            n_a = estado["N_A"]
+            quejas = estado["quejas"]
+            xi = (quejas / n_a * 100) if n_a > 0 else 0.0
+        valores.append(xi)
+        k += 1
+
+    # Step 4: estimación final de θ.
+    x_bar = sum(valores) / k
+    s2 = sum((x - x_bar) ** 2 for x in valores) / (k - 1)
+    s = math.sqrt(s2)
+
+    return {
+        "theta": round(x_bar, 4),
+        "S": round(s, 4),
+        "k": k,
+        "d": d,
+        "precision": round(s / math.sqrt(k), 4),
+        "valores": valores,
+    }
+
+
+def imprimir_analisis_estadistico(
+    res_2_pico: dict,
+    res_2_global: dict,
+    res_3_pico: dict,
+    res_3_global: dict,
+) -> None:
+    """
+    Imprime los resultados del análisis estadístico para ambas
+    variantes y ambas métricas.
+    """
+
+    d = res_2_pico["d"]
+
+    print()
+    print("=" * 64)
+    print("  ANÁLISIS ESTADÍSTICO DE LA SIMULACIÓN")
+    print("  Algoritmo de parada: continuar hasta S/√k < d")
+    print("=" * 64)
+    print("  θ        : porcentaje de clientes que esperaron > 5 min")
+    print("  X̄        : estimación de θ (promedio de k corridas)")
+    print("  S        : desviación estándar muestral")
+    print("  S/√k     : desviación estándar del estimador (debe ser < d)")
+    print("  k        : corridas necesarias para alcanzar la precisión d")
+    print("=" * 64)
+
+    bloques = [
+        (2, "Hora pico", res_2_pico),
+        (2, "Global", res_2_global),
+        (3, "Hora pico", res_3_pico),
+        (3, "Global", res_3_global),
+    ]
+
+    for empleados, metrica, res in bloques:
+        print("─" * 62)
+        print(f"  Variante : {empleados} empleados  |  Métrica: % quejas en {metrica.lower()}")
+        print(f"  d (precisión objetivo) : {res['d']}")
+        print("─" * 62)
+        print(f"  Corridas realizadas (k) : {res['k']}")
+        print(f"  Estimación de θ  (X̄)   : {res['theta']:.2f}%")
+        print(f"  Desv. estándar   (S)    : {res['S']:.4f}")
+        print(f"  Precisión final (S/√k)  : {res['precision']:.4f}  < {res['d']}  ✓")
+        print("─" * 62)
+
+    print()
+    print("=" * 64)
+    print("  RESUMEN")
+    print("=" * 64)
+    print(f"  {'Variante':<14} | {'Métrica':<10} | {'k':>3} | {'X̄ (θ)':>10} | {'S/√k':>8}")
+    print("  " + "─" * 62)
+    resumen = [
+        ("2 empleados", "Hora pico", res_2_pico),
+        ("2 empleados", "Global", res_2_global),
+        ("3 empleados", "Hora pico", res_3_pico),
+        ("3 empleados", "Global", res_3_global),
+    ]
+    for variante, metrica, res in resumen:
         print(
-            f"  {r2['lambda_pico']:>7.2f} | {r2['pct_quejas']:>16.2f}% | {r3['pct_quejas']:>16.2f}% | {reduccion:>+13.2f}"
+            f"  {variante:<14} | {metrica:<10} | {res['k']:>3} | {res['theta']:>9.2f}% | {res['precision']:>8.4f}"
         )
-
+    print("=" * 64)
+    print(f"  Conclusión: con d = {d}, el estimador X̄ tiene una desviación")
+    print(f"  estándar menor a {d} puntos porcentuales en todos los casos.")
     print("=" * 64)
     print()

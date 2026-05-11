@@ -20,8 +20,8 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from core.parametros  import SEMILLA, LAMBDA_NORMAL, LAMBDA_PICO
-from core.resultados  import imprimir_resultados, analisis_sensibilidad, comparar_variantes
-from modelos          import simulador
+from core import resultados as resultados
+from modelos import simulador
 
 
 # ── Lambdas a explorar en el análisis de sensibilidad ────────────────────────
@@ -41,7 +41,7 @@ def main():
         n_empleados_base=2,
         tercer_empleado_en_pico=False,
     )
-    imprimir_resultados(estado_2, n_empleados=2)
+    resultados.imprimir_resultados(estado_2, n_empleados=2)
 
     # ── Corrida base: 3 empleados ─────────────────────────────────────────────
     print("━" * 62)
@@ -54,10 +54,10 @@ def main():
         n_empleados_base=2,
         tercer_empleado_en_pico=True,
     )
-    imprimir_resultados(estado_3, n_empleados=3)
+    resultados.imprimir_resultados(estado_3, n_empleados=3)
 
     # ── Análisis de sensibilidad ──────────────────────────────────────────────
-    res_2 = analisis_sensibilidad(
+    res_2 = resultados.analisis_sensibilidad(
         fn_simular=lambda lambda_normal, lambda_pico: simulador.simular(
             lambda_normal=lambda_normal,
             lambda_pico=lambda_pico,
@@ -68,7 +68,7 @@ def main():
         lambdas_pico=LAMBDAS_PICO,
         n_rep=30,
     )
-    res_3 = analisis_sensibilidad(
+    res_3 = resultados.analisis_sensibilidad(
         fn_simular=lambda lambda_normal, lambda_pico: simulador.simular(
             lambda_normal=lambda_normal,
             lambda_pico=lambda_pico,
@@ -81,7 +81,55 @@ def main():
     )
 
     # ── Comparación final ─────────────────────────────────────────────────────
-    comparar_variantes(res_2, res_3)
+    resultados.comparar_variantes(res_2, res_3)
+
+    # ── Análisis estadístico ─────────────────────────────────────────────────
+    D = 2.0  # máxima precisión aceptable S/√k en puntos porcentuales
+
+    print("\nEjecutando análisis estadístico (puede tomar unos segundos)...")
+
+    res_2_pico = resultados.analisis_estadistico(
+        fn_simular=lambda lp: simulador.simular(
+            lambda_normal=LAMBDA_NORMAL,
+            lambda_pico=lp,
+            n_empleados_base=2,
+            tercer_empleado_en_pico=False,
+        ),
+        d=D,
+        metrica="pico",
+    )
+    res_2_global = resultados.analisis_estadistico(
+        fn_simular=lambda lp: simulador.simular(
+            lambda_normal=LAMBDA_NORMAL,
+            lambda_pico=lp,
+            n_empleados_base=2,
+            tercer_empleado_en_pico=False,
+        ),
+        d=D,
+        metrica="global",
+    )
+    res_3_pico = resultados.analisis_estadistico(
+        fn_simular=lambda lp: simulador.simular(
+            lambda_normal=LAMBDA_NORMAL,
+            lambda_pico=lp,
+            n_empleados_base=2,
+            tercer_empleado_en_pico=True,
+        ),
+        d=D,
+        metrica="pico",
+    )
+    res_3_global = resultados.analisis_estadistico(
+        fn_simular=lambda lp: simulador.simular(
+            lambda_normal=LAMBDA_NORMAL,
+            lambda_pico=lp,
+            n_empleados_base=2,
+            tercer_empleado_en_pico=True,
+        ),
+        d=D,
+        metrica="global",
+    )
+
+    resultados.imprimir_analisis_estadistico(res_2_pico, res_2_global, res_3_pico, res_3_global)
 
 
 if __name__ == "__main__":

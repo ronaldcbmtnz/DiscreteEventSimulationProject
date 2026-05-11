@@ -16,6 +16,7 @@ La simulación estima el porcentaje de clientes que esperan más de 5 minutos en
 - [Instalación y ejecución](#instalación-y-ejecución)
 - [Parámetros configurables](#parámetros-configurables)
 - [Resultados y análisis](#resultados-y-análisis)
+- [Análisis estadístico](#análisis-estadístico)
 - [Decisiones de diseño](#decisiones-de-diseño)
 - [Repositorio y autor](#repositorio-y-autor)
 
@@ -102,6 +103,24 @@ Además, realiza un análisis de sensibilidad variando `λ_pico` y promediando 3
 En los resultados promedio, cuando `λ_pico = 0.30`, el tercer empleado reduce las quejas en hora pico en aproximadamente **21 puntos porcentuales** frente al escenario con 2 empleados. Esa reducción justifica claramente la contratación temporal del tercer servidor en escenarios de presión moderada o alta.
 
 La sensibilidad también muestra el punto en que el sistema comienza a saturarse: a medida que `λ_pico` crece, el porcentaje de quejas en pico aumenta con mucha más rapidez que el porcentaje global.
+
+## Análisis estadístico
+
+Además del análisis de sensibilidad, el proyecto incorpora un análisis estadístico basado en el criterio de parada del Capítulo 4 del curso. El objetivo es estimar de forma más robusta el parámetro $\theta$, entendido como el porcentaje de clientes que esperan más de 5 minutos en cola.
+
+Para cada variante del modelo y para cada métrica se calcula:
+
+- **Hora pico**: porcentaje de quejas entre los clientes que llegaron en franjas pico.
+- **Global**: porcentaje de quejas entre todos los clientes atendidos.
+
+El procedimiento sigue esta idea:
+
+1. Ejecutar al menos 30 corridas independientes.
+2. Calcular la media muestral $\bar X$ y la desviación estándar muestral $S$.
+3. Continuar simulando hasta que la precisión del estimador cumpla $S/\sqrt{k} < d$.
+4. Reportar la estimación final, la desviación estándar, el número de corridas necesarias y la precisión alcanzada.
+
+En la implementación actual se usa `d = 2.0` puntos porcentuales como precisión objetivo. Esto permite comparar de forma consistente el comportamiento de las dos variantes sin depender de una sola corrida puntual.
 
 ## Decisiones de diseño
 
